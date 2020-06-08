@@ -1,7 +1,7 @@
 '''
 ||
 || @file 	DSLR_timelapse.py
-|| @version	1.0
+|| @version	1.1
 || @author	Nathaniel Furman
 || @contact	nfurman@ieee.org
 ||
@@ -27,9 +27,9 @@
 || #
 ||
 
-Additional credit to GitHub user 'IronSenior' for python functions to
-control aspects of the gphoto2 library. Thank you for your work, as it
-greatly helped here.
+||| Additional credit to GitHub user 'IronSenior' for python functions to
+||| control aspects of the gphoto2 library. Thank you for your work, as it
+||| greatly helped here.
 
 '''
 
@@ -66,9 +66,6 @@ def check_range(value):
         raise argparse.ArgumentTypeError("%s is an invalid hour value" % value)
     return ivalue
 
-# TODO:
-# Include offset and reverse offset in timing
-
 def find_city():
   from astral import LocationInfo
   from astral.geocoder import database, lookup
@@ -101,33 +98,48 @@ def find_city():
     exit()
   return city
 
-def take_photos(cam):
-  while True:
+def take_photos(saveLocal=False):
+  if saveLocal:
+    cam = configured_camera()
     counter = 0
-    capt_name = 'capt_' + f'{counter:04}' + '.jpg'
-    counter += 1
-    curr_time = datetime.datetime.today()
-    # Check if ran past time
-    if curr_time.hour > end_time:
-      print('\n\nFinished taking photos. Enjoy!\n\n')
-      break
-    # Take the photo
-    # Adapted from IronSenior
-    cam_file_path = gp.check_result(gp.gp_camera_capture(cam, gp.GP_CAPTURE_IMAGE))
-    print('Internal image (camera) file path: {0}/{1}'.format(file_path.folder,file_path.name))
-    target = os.path.join(curr_formatted, capt_name)
-    camera_file = gp.check_result(gp.gp_camera_file_get(cam, file_path.folder, file_path.name, gp.GP_FILE_TYPE_NORMAL))
-    gp.check_result(gp.gp_file_save(camera_file, target))
-    print('Captured image ', capt_name, ', sleeping now.')
-    try:
-      time.sleep(delay)
-    except KeyboardInterrupt:
-      print('Detected KeyboardInterrupt, exiting...')
-  
-  gp.check_result(gp.gp_camera_exit(cam))
-
-
-
+    while True:
+      capt_name = 'capt_' + f'{counter:04}' + '.jpg'
+      counter += 1
+      curr_time = datetime.datetime.today()
+      # Check if ran past time
+      if curr_time.hour > (end_time - round(reverse_offset/60)) and curr_time.hour < (start_time + round(offset/60)):
+        print('\n\nFinished taking photos. Enjoy!\n\n')
+        break
+      # Take the photo
+      # Adapted from IronSenior
+      cam_file_path = gp.check_result(gp.gp_camera_capture(cam, gp.GP_CAPTURE_IMAGE))
+      print('Internal image (camera) file path: {0}/{1}'.format(cam_file_path.folder,cam_file_path.name))
+      target = os.path.join(curr_formatted, capt_name)
+      camera_file = gp.check_result(gp.gp_camera_file_get(cam, cam_file_path.folder, cam_file_path.name, gp.GP_FILE_TYPE_NORMAL))
+      gp.check_result(gp.gp_file_save(camera_file, target))
+      print('Captured image ', capt_name, ', sleeping now.')
+      try:
+        time.sleep(delay*60)
+      except KeyboardInterrupt:
+        print('\nDetected KeyboardInterrupt, exiting...')
+        break
+    
+    gp.check_result(gp.gp_camera_exit(cam))
+  else:
+    while True:
+      curr_time = datetime.datetime.today()
+      # Check if ran past time
+      if curr_time.hour > (end_time - round(reverse_offset/60)) and curr_time.hour < (start_time + round(offset/60)):
+        print('\n\nFinished taking photos. Enjoy!\n\n')
+        break
+      os.system('gphoto2 --set-config capturetarget=1')
+      os.system('gphoto2 --capture-image')
+      print('Captured image, sleeping now.')
+      try:
+        time.sleep(delay*60)
+      except KeyboardInterrupt:
+        print('\nDetected KeyboardInterrupt, exiting...')
+        break
 
 if __name__ == '__main__':
   import argparse
@@ -136,7 +148,7 @@ if __name__ == '__main__':
         help='The delay (in minutes) between each photo.')
   parser.add_argument('--start-time', default=-1, type=check_range,
         help='Set which hour (24 hour time) to start, default is sunset.')
-  parser.add_argument('--end_time', default=-1, type=check_range,
+  parser.add_argument('--end-time', default=-1, type=check_range,
         help='Set which hour (24 hour time) to end, default is sunrise.')
   parser.add_argument('--offset', default=0, type=check_positive,
         help='Set time in minutes after "start_time" to take first photo.')
@@ -158,13 +170,13 @@ if __name__ == '__main__':
     s = sun(city.observer, datetime.date.today(), tzinfo=city.timezone) 
     if start_time == -1:
       start_time = s['sunset'].hour
-      print('Start time set to:\t', start_time)
+      print('Start time set to:\t', start_time, '\tOffset:\t\t',round(offset/60))
     if end_time == -1:
       end_time = s['sunrise'].hour
-      print('End time set to:\t', end_time) 
+      print('End time set to:\t', end_time, '\tRev.-Offset:\t',round(reverse_offset/60))
 
   # Calculated time taking photos
-  time_on = (24 - start_time) + end_time
+  time_on = 24 - start_time - round(offset/60) + end_time - round(reverse_offset/60)
   print('Taking photos for ', time_on, ' hours.')
   
   # Calculate approximate number of photos being taken
@@ -188,13 +200,29 @@ if __name__ == '__main__':
     print('\nExiting...')
     exit()
 
-  # Set up directory 
+  try:
+    while True:
+      result = input('Save files to RPi (if no, files saved to camera SD card)(y/n)? ')
+      if result.lower() == 'n':
+        saveLocal = False
+        break
+      elif result.lower() == 'y':
+        saveLocal = True
+        break
+      else:
+        print('Please choose yes or no')
+  except KeyboardInterrupt:
+    print('\nExiting...')
+    exit()
+
   curr_day = datetime.datetime.today()
-  curr_formatted = 'pics_' + curr_day.isoformat()[:16]
-  os.mkdir(curr_formatted)
+  if saveLocal:
+    # Set up directory 
+    curr_formatted = 'pics_' + curr_day.isoformat()[:16]
+    os.mkdir(curr_formatted)
   # Check if before start_time
   curr_hour = curr_day.hour
-  if curr_hour < start_time:
+  if curr_hour < (start_time + round(offset/60)):
     curr_min = curr_day.minute
     sleep_time = 60*(start_time - curr_hour) - curr_min
     print('Not time to start, sleeping for ', sleep_time, 'minutes')
@@ -204,11 +232,11 @@ if __name__ == '__main__':
       print('\nWoken from sleep, exiting...')
       exit()
 
-  cam = configured_camera()
-  take_photos(cam)
+  take_photos(saveLocal)
 
 '''
 || @changelog
 || | 1.0 2020-06-07 - Nathaniel Furman : Initial release
+|| | 1.1 2020-06-08 - Nathaniel Furman : Added offset and save to camera
 || #
 '''
