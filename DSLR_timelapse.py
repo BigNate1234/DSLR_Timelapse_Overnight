@@ -67,11 +67,7 @@ def check_range(value):
     return ivalue
 
 # TODO:
-# input verification (within 24 hour time and positive offsets)
-# argparse
-# define functions
-# put main script in if name=main block
-# add offset stuff
+# Include offset and reverse offset in timing
 
 def find_city():
   from astral import LocationInfo
