@@ -8,7 +8,7 @@ This script is created to take a time lapse overnight on a DSLR camera compatibl
 
 Connect RPi (or other device) to the camera using the USB cable.
 
-# Execution]
+# Execution
 $ python3 DSLR_timelapse.py [-h] [--start-time START_TIME] [--end-time END_TIME] [--offset OFFSET] [--reverse-offset REVERSE_OFFSET] [--img-size IMG_SIZE] delay
 
 Main parameters to control:
