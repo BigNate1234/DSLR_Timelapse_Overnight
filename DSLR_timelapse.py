@@ -232,6 +232,7 @@ if __name__ == '__main__':
       print('\nWoken from sleep, exiting...')
       exit()
 
+  print('Taking photos...')
   take_photos(saveLocal)
 
 '''
